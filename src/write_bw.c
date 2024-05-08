@@ -34,19 +34,37 @@
  * $Id$
  */
 
-
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "perftest_communication.h"
+#include <bits/pthreadtypes.h>
 
+struct THREAD_ARGS {
+	pthread_mutex_t* mutex;
+	pthread_barrier_t* barrier;
+	int argc;
+	char **argv;
+};
 /******************************************************************************
- ******************************************************************************/
-int main(int argc, char *argv[])
+ *******v***********************************************************************/
+int write_bw(struct THREAD_ARGS* args)
 {
+	int argc = args->argc;
+	char** argv = args->argv;
+	pthread_mutex_t* mutex = args->mutex;
+	pthread_barrier_t* barrier = args->barrier;
+for (int j = 0; j< argc; j++)
+{
+	printf("%s ", argv[j]);
+}
+printf("\n");
+
 	int				ret_parser, i = 0, rc;
 	struct ibv_device		*ib_dev = NULL;
 	struct pingpong_context		ctx;
@@ -64,7 +82,8 @@ int main(int argc, char *argv[])
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
-
+pthread_mutex_lock(mutex);
+printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 	/* Configure the parameters values according to user arguments or default values. */
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {
@@ -116,7 +135,7 @@ int main(int argc, char *argv[])
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
 	}
-
+	printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
@@ -164,7 +183,8 @@ int main(int argc, char *argv[])
 			goto free_mem;
 		}
 	}
-
+	printf("Thread ID: %lu release mutex\n", (unsigned long)pthread_self());
+	pthread_mutex_unlock(mutex);
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -240,6 +260,8 @@ int main(int argc, char *argv[])
 
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
+    pthread_barrier_wait(barrier);
+	printf("Thread %lu: Continuing after the barrier\n", (unsigned long)pthread_self());
 
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
@@ -558,3 +580,37 @@ return_error:
 	//coverity[leaked_storage]
 	return FAILURE;
 }
+
+int main(int argc, char *argv[])
+{
+    const int NUM_THREADS = 2;
+	pthread_mutex_t pth_mutex;
+	pthread_t threads[NUM_THREADS];
+	pthread_barrier_t barrier;
+
+    	typedef void* (*FuncPtr)(void*);
+   pthread_barrier_init(&barrier, NULL, NUM_THREADS);
+    struct THREAD_ARGS thread_arg = {&pth_mutex, &barrier, argc, argv};
+    // Create threads
+    for (long i = 0; i < NUM_THREADS; ++i) {
+          if(i>0){
+            for (int j = 1; j<argc; j++)
+		    if(strcmp(argv[j],"10.0.0.1") == 0 ) argv[j] = "10.0.0.2";
+	     
+	  }
+    	    pthread_create(&threads[i], NULL, (FuncPtr)write_bw, (void*)&thread_arg);
+	    sleep(3);
+    }
+    // Join threads
+    for (long i = 0; i < NUM_THREADS; ++i) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // Clean up
+    pthread_mutex_destroy(&pth_mutex);
+    pthread_barrier_destroy(&barrier);
+    
+    return 0;
+    
+}
+
