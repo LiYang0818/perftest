@@ -51,6 +51,7 @@ struct THREAD_ARGS {
 	int argc;
 	char **argv;
 };
+
 /******************************************************************************
  *******v***********************************************************************/
 int write_bw(struct THREAD_ARGS* args)
@@ -59,11 +60,11 @@ int write_bw(struct THREAD_ARGS* args)
 	char** argv = args->argv;
 	pthread_mutex_t* mutex = args->mutex;
 	pthread_barrier_t* barrier = args->barrier;
-for (int j = 0; j< argc; j++)
-{
-	printf("%s ", argv[j]);
-}
-printf("\n");
+	for (int j = 0; j< argc; j++)
+	{
+		printf("%s ", argv[j]);
+	}
+	printf("\n");
 
 	int				ret_parser, i = 0, rc;
 	struct ibv_device		*ib_dev = NULL;

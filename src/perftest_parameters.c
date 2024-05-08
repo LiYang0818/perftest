@@ -2443,7 +2443,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			if (duplicates_checker[long_option_index]) {
 				fprintf(stderr," Duplicated argument: %s \n", long_options[long_option_index].name);
 				free(duplicates_checker);
-				return FAILURE;
+				goto return_failure;
 			}
 			duplicates_checker[long_option_index]++;
 		} else if(c > 0) {
@@ -2452,7 +2452,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			if (duplicates_checker[char_index] && c != '?') {
 				fprintf(stderr," Duplicated argument: -%c \n", c);
 				free(duplicates_checker);
-				return FAILURE;
+				goto return_failure;
 			}
 			duplicates_checker[char_index]++;
 		}
@@ -2467,7 +2467,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->ib_port < MIN_IB_PORT) {
 					  fprintf(stderr, "IB Port can't be less than %d\n", MIN_IB_PORT);
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'm': CHECK_VALUE(user_param->mtu,int,"MTU",not_int_ptr); break;
@@ -2480,7 +2480,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->sl > MAX_SL) {
 					  fprintf(stderr," Only %d Service levels\n",MAX_SL);
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  if (user_param->connection_type == RawEth)
 					  user_param->raw_qos = 1;
@@ -2491,7 +2491,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'q': if (user_param->tst != BW) {
 					fprintf(stderr," Multiple QPs only available on bw tests\n");
 					free(duplicates_checker);
-					return FAILURE;
+					goto return_failure;
 				  }
 				  CHECK_VALUE_IN_RANGE(user_param->num_of_qps,int,MIN_QP_NUM,MAX_QP_NUM,"num of Qps",not_int_ptr);
 				  break;
@@ -2499,14 +2499,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->verb == READ || user_param->verb ==ATOMIC) {
 					  fprintf(stderr," Inline feature not available on READ/Atomic verbs\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'o': CHECK_VALUE(user_param->out_reads,int,"Outstanding Reads",not_int_ptr);
 				  if (user_param->verb != READ && user_param->verb != ATOMIC) {
 					  fprintf(stderr," Setting Outstanding reads only available on READ verb\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'M': GET_STRING(user_param->user_mgid,strdupa(optarg)); break;
@@ -2514,7 +2514,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->verb != SEND && user_param->verb != WRITE && user_param->verb != WRITE_IMM && user_param->rx_depth > DEF_RX_RDMA) {
 					  fprintf(stderr," On RDMA verbs rx depth can be only 1\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'Q': CHECK_VALUE_IN_RANGE(user_param->cq_mod,int,MIN_CQ_MOD,MAX_CQ_MOD,"CQ moderation",not_int_ptr);
@@ -2525,7 +2525,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  fprintf(stderr," You are not running the atomic_lat/bw test!\n");
 					  fprintf(stderr," To change the atomic action type, you must run one of the atomic tests\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 
 				  if (strcmp(atomicTypesStr[0],optarg)==0)
@@ -2574,21 +2574,21 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->size < 1 || user_param->size > (UINT_MAX / 2)) {
 					  fprintf(stderr," Message Size should be between %d and %d\n",1,UINT_MAX/2);
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'e': user_param->use_event = ON;
 				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 					  fprintf(stderr," Events feature not available on WRITE verb\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'X':
 				  if (user_param->verb == WRITE || user_param->verb == WRITE_IMM) {
 					  fprintf(stderr, " Events feature not available on WRITE verb\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  user_param->use_eq_num = ON;
 				  CHECK_VALUE_IN_RANGE(user_param->eq_num, int, MIN_EQ_NUM, MAX_EQ_NUM, "EQN", not_int_ptr);
@@ -2597,19 +2597,19 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->tst == LAT) {
 					  fprintf(stderr," Bidirectional is only available in BW test\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  } break;
 			case 'N': user_param->noPeak = ON;
 				  if (user_param->tst == LAT) {
 					  fprintf(stderr," NoPeak only valid for BW tests\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  } break;
 			case 'C':
 				  if (user_param->tst != LAT) {
 					  fprintf(stderr," Available only on Latency tests\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  user_param->r_flag->cycles = ON;
 				  break;
@@ -2617,13 +2617,13 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->verb != SEND) {
 					  fprintf(stderr," MultiCast feature only available on SEND verb\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  } break;
 			case 'H':
 				  if (user_param->tst == BW) {
 					  fprintf(stderr," Available only on Latency tests\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  user_param->r_flag->histogram = ON;
 				  break;
@@ -2631,7 +2631,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->tst == BW) {
 					fprintf(stderr," is Available only on Latency tests\n");
 					free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  user_param->r_flag->unsorted = ON;
 				  break;
@@ -2640,14 +2640,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  user_param->is_source_mac = ON;
 				  if(parse_mac_from_str(optarg, user_param->source_mac)) {
 					free(duplicates_checker);
-					return FAILURE;
+					goto return_failure;
 				  } break;
 			case 'E':
 				  user_param->is_old_raw_eth_param = 1;
 				  user_param->is_dest_mac = ON;
 				  if(parse_mac_from_str(optarg, user_param->dest_mac)) {
 					free(duplicates_checker);
-					return FAILURE;
+					goto return_failure;
 				  } break;
 			case 'J':
 				  user_param->is_old_raw_eth_param = 1;
@@ -2666,7 +2666,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if(OFF == check_if_valid_udp_port(user_param->server_port)) {
 					  fprintf(stderr," Invalid server UDP port\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'k':
@@ -2676,7 +2676,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if(OFF == check_if_valid_udp_port(user_param->client_port)) {
 					  fprintf(stderr," Invalid client UDP port\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'Y':
@@ -2684,7 +2684,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (parse_ethertype_from_str(optarg, &user_param->ethertype)) {
 					  fprintf(stderr, " Invalid ethertype value\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'w':
@@ -2693,7 +2693,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->limit_bw < 0) {
 					  fprintf(stderr, " Invalid Minimum BW Limit\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'y':
@@ -2702,14 +2702,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				  if (user_param->limit_msgrate < 0) {
 					  fprintf(stderr, " Invalid Minimum msgRate Limit\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'W':
 				  if (counters_alloc(optarg, &user_param->counter_ctx)) {
 					  fprintf(stderr, "Failed to parse the performance counter list\n");
 					  free(duplicates_checker);
-					  return FAILURE;
+					  goto return_failure;
 				  }
 				  break;
 			case 'P': user_param->machine = CLIENT; break;
@@ -2718,7 +2718,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			case 'G':
 				fprintf(stderr, "RSS isn't supported\n");
 				free(duplicates_checker);
-				return FAILURE;
+				goto return_failure;
 			case 0: /* required for long options to work. */
 				if (pkey_flag) {
 					CHECK_VALUE(user_param->pkey_index,int,"Pkey index",not_int_ptr);
@@ -2730,7 +2730,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->rate_limit <= 0) {
 						fprintf(stderr, " Rate limit must be non-negative floating point number\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					/* if not specified, choose HW rate limiter as default */
 					if (user_param->rate_limit_type == DISABLE_RATE_LIMIT)
@@ -2756,7 +2756,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					} else {
 						fprintf(stderr, " Invalid rate limit units. Please use M,g or p\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					rate_units_flag = 0;
 				}
@@ -2771,7 +2771,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					else {
 						fprintf(stderr, " Invalid rate limit type flag. Please use HW, SW or PP.\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					rate_limit_type_flag = 0;
 				}
@@ -2785,7 +2785,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					} else {
 						fprintf(stderr, " Invalid verbosity level output flag. Please use bandwidth, latency, message_rate\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					verbosity_output_flag = 0;
 				}
@@ -2801,14 +2801,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				    (use_neuron_dmabuf_flag && !neuron_memory_dmabuf_supported()) ||
 				    (use_hl_flag && !hl_memory_supported())) {
 					printf(" Unsupported memory type\n");
-					return FAILURE;
+					goto return_failure;
 				}
 				/* Memory types are mutually exclucive, make sure we were not already asked to use a different memory type. */
 				if (user_param->memory_type != MEMORY_HOST &&
 				    (mmap_file_flag || use_rocm_flag || use_neuron_flag || use_hl_flag ||
 				     ((use_cuda_flag || use_cuda_bus_id_flag) && user_param->memory_type != MEMORY_CUDA))) {
 					fprintf(stderr, " Can't use multiple memory types\n");
-					return FAILURE;
+					goto return_failure;
 				}
 				if (use_cuda_flag) {
 					CHECK_VALUE_NON_NEGATIVE(user_param->cuda_device_id,int,"CUDA device",not_int_ptr);
@@ -2828,7 +2828,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->memory_type != MEMORY_CUDA) {
 						fprintf(stderr, "CUDA DMA-BUF cannot be used without CUDA\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					use_cuda_dmabuf_flag = 0;
 				}
@@ -2842,7 +2842,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->neuron_core_id = strtol(optarg, NULL, 0);
 					if (user_param->neuron_core_id < 0) {
 						fprintf(stderr, "Invalid Neuron Core ID %d\n", user_param->neuron_core_id);
-						return FAILURE;
+						goto return_failure;
 					}
 					user_param->memory_type = MEMORY_NEURON;
 					user_param->memory_create = neuron_memory_create;
@@ -2853,7 +2853,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->memory_type != MEMORY_NEURON) {
 						fprintf(stderr, "Neuron DMA-BUF cannot be used without Neuron device\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					use_neuron_dmabuf_flag = 0;
 				}
@@ -2867,7 +2867,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					CHECK_VALUE(user_param->flow_label,int,"flow label",not_int_ptr);
 					if (user_param->connection_type == RawEth && user_param->flow_label < 0) {
 						fprintf(stderr," flow label must be non-negative for RawEth\n");
-						return FAILURE;
+						goto return_failure;
 					}
 					flow_label_flag = 0;
 				}
@@ -2906,7 +2906,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->flows == 0) {
 						fprintf(stderr, "Invalid flows value. Please set a positive number\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					flows_flag = 0;
 				}
@@ -2915,7 +2915,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->flows_burst == 0) {
 						fprintf(stderr, "Invalid burst flow value. Please set a positive number\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					flows_burst_flag = 0;
 				}
@@ -2924,7 +2924,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if (user_param->link_type == LINK_FAILURE) {
 						fprintf(stderr, "Invalid link layer value should be IB or ETHERNET.\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					force_link_flag = 0;
 				}
@@ -2934,7 +2934,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if(parse_mac_from_str(optarg, user_param->remote_mac))
 					{
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					remote_mac_flag = 0;
 				}
@@ -2943,7 +2943,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					user_param->is_source_mac = 1;
 					if(parse_mac_from_str(optarg, user_param->local_mac)) {
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					local_mac_flag = 0;
 				}
@@ -2976,7 +2976,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if(OFF == check_if_valid_udp_port(user_param->remote_port)) {
 						fprintf(stderr," Invalid remote UDP port\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					remote_port_flag = 0;
 				}
@@ -2987,7 +2987,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					if(OFF == check_if_valid_udp_port(user_param->local_port)) {
 						fprintf(stderr," Invalid local UDP port\n");
 						free(duplicates_checker);
-						return FAILURE;
+						goto return_failure;
 					}
 					local_port_flag = 0;
 				}
@@ -3050,7 +3050,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if (use_write_with_imm_flag) {
 					if ((user_param->tst != LAT && user_param->tst != BW) || user_param->verb != WRITE) {
 						fprintf(stderr, "Write_with_imm can only be used with write_lat and write_bw tests\n");
-						return FAILURE;
+						goto return_failure;
 					}
 					user_param->verb = WRITE_IMM;
 					use_write_with_imm_flag = 0;
@@ -3064,7 +3064,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 					  usage_raw_ethernet(user_param->tst);
 				  }
 				  free(duplicates_checker);
-				  return FAILURE;
+				  goto return_failure;
 		}
 
 	}
@@ -3136,14 +3136,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if(1 != parse_ip6_from_str(local_ip,
 							  (struct in6_addr *)&(user_param->local_ip6))) {
 					fprintf(stderr," Invalid local IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 			if (user_param->is_client_ip) {
 				if(1 != parse_ip6_from_str(remote_ip,
 							  (struct in6_addr *)&(user_param->remote_ip6))) {
 					fprintf(stderr," Invalid remote IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 		} else {
@@ -3151,14 +3151,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if(1 != parse_ip6_from_str(server_ip,
 							  (struct in6_addr *)&(user_param->server_ip6))) {
 					fprintf(stderr," Invalid server IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 			if (user_param->is_client_ip) {
 				if(1 != parse_ip6_from_str(client_ip,
 							  (struct in6_addr *)&(user_param->client_ip6))) {
 					fprintf(stderr," Invalid client IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 		}
@@ -3169,14 +3169,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if(1 != parse_ip_from_str(local_ip,
 							  &(user_param->local_ip))) {
 					fprintf(stderr," Invalid local IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 			if (user_param->is_client_ip) {
 				if(1 != parse_ip_from_str(remote_ip,
 							  &(user_param->remote_ip))) {
 					fprintf(stderr," Invalid remote IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 		} else {
@@ -3184,14 +3184,14 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 				if(1 != parse_ip_from_str(server_ip,
 							  &(user_param->server_ip))) {
 					fprintf(stderr," Invalid server IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 			if (user_param->is_client_ip) {
 				if(1 != parse_ip_from_str(client_ip,
 							  &(user_param->client_ip))) {
 					fprintf(stderr," Invalid client IP address\n");
-					return FAILURE;
+					goto return_failure;
 				}
 			}
 		}
@@ -3240,7 +3240,7 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 
 	} else if (optind < argc) {
 		fprintf(stderr," Invalid Command line. Please check command rerun \n");
-		return 1;
+		goto return_failure;
 	}
 
 	if(user_param->connection_type != RawEth)
@@ -3254,8 +3254,12 @@ int parser(struct perftest_parameters *user_param,char *argv[], int argc)
 			user_param->machine = SERVER;
 	}
 	set_raw_eth_parameters(user_param);
-	force_dependecies(user_param);
-	return 0;
+	force_dependecies(user_param);	
+	return SUCCESS;
+
+return_failure:
+	optind = 1;
+	return FAILURE;
 }
 
 /******************************************************************************
