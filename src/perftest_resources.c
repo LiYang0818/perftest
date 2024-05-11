@@ -5213,7 +5213,7 @@ void duration_state_transit(struct perftest_parameters *user_param)
 	cycles_t now = get_cycles();
 
 	if (user_param->cycles_to_transit == 0) {
-		user_param->cycles_to_transit = now + user_param->margin * cycles_per_second();
+		user_param->cycles_to_transit = now + user_param->margin * cycles_per_second(user_param);
 		user_param->state = START_STATE;
 	}
 
@@ -5224,14 +5224,14 @@ void duration_state_transit(struct perftest_parameters *user_param)
 				get_cpu_stats(user_param,1);
 				user_param->tposted[0] = now;
 				user_param->cycles_to_transit = 
-				    now + (user_param->duration - 2*(user_param->margin)) * cycles_per_second();
+				    now + (user_param->duration - 2*(user_param->margin)) * cycles_per_second(user_param);
 				break;
 			case SAMPLE_STATE:
 				user_param->state = STOP_SAMPLE_STATE;
 				user_param->tcompleted[0] = now;
 				get_cpu_stats(user_param,2);
 				if (user_param->margin > 0) {
-					user_param->cycles_to_transit = now + user_param->margin * cycles_per_second();
+					user_param->cycles_to_transit = now + user_param->margin * cycles_per_second(user_param);
 				}
 				break;
 			case STOP_SAMPLE_STATE:

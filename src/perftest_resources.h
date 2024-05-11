@@ -850,6 +850,8 @@ void catch_alarm(int sig);
 
 void check_alive(int sig);
 
+void duration_state_transit(struct perftest_parameters *user_param);
+
 void print_bw_infinite_mode();
 
 /* handle_signal_print_thread
