@@ -15,6 +15,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <pthread.h>
+#include "utils.h"
 #if defined(__FreeBSD__)
 #include <sys/stat.h>
 #endif
