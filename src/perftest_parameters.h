@@ -634,6 +634,8 @@ struct perftest_parameters {
 	int 				has_source_ip;
 	int 			ah_allocated;
 	int				use_write_with_imm;
+	// The cycles when the duration state should change
+	cycles_t   cycles_to_transit;
 };
 
 struct report_options {

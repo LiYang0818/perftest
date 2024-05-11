@@ -813,7 +813,8 @@ static void init_perftest_params(struct perftest_parameters *user_param)
 	user_param->vlan_en             = OFF;
 	user_param->vlan_pcp		= 1;
 	user_param->print_eth_func 	= &print_ethernet_header;
-
+	user_param->cycles_to_transit = 0;
+	
 	if (user_param->tst == LAT) {
 		user_param->r_flag->unsorted	= OFF;
 		user_param->r_flag->histogram	= OFF;

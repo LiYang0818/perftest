@@ -3369,12 +3369,15 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	if (user_param->test_type == DURATION) {
 		duration_param=user_param;
 		duration_param->state = START_STATE;
+#if 0
 		signal(SIGALRM, catch_alarm);
 		if (user_param->margin > 0 )
 			alarm(user_param->margin);
 		else
 			catch_alarm(0); /* move to next state */
-
+#else
+		duration_state_transit(user_param);
+#endif
 		user_param->iters = 0;
 	}
 
@@ -3425,6 +3428,7 @@ int run_iter_bw(struct pingpong_context *ctx,struct perftest_parameters *user_pa
 	while (totscnt < tot_iters  || totccnt < tot_iters ||
 		(user_param->test_type == DURATION && user_param->state != END_STATE) ) {
 
+		duration_state_transit(user_param);
 		/* main loop to run over all the qps and post each time n messages */
 		for (index =0 ; index < num_of_qps ; index++) {
 			if (user_param->rate_limit_type == SW_RATE_LIMIT && is_sending_burst == 0) {
@@ -5198,6 +5202,74 @@ void check_alive(int sig)
 	}
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
+void duration_state_transit(struct perftest_parameters *user_param)
+{
+	if (user_param->test_type != DURATION) return;
+
+	cycles_t now = get_cycles();
+
+	if (user_param->cycles_to_transit == 0) {
+		user_param->cycles_to_transit = now + user_param->margin * cycles_per_second();
+		user_param->state = START_STATE;
+	}
+
+	if (now >= user_param->cycles_to_transit) {
+		switch (user_param->state) {
+			case START_STATE:
+				user_param->state = SAMPLE_STATE;
+				get_cpu_stats(user_param,1);
+				user_param->tposted[0] = now;
+				user_param->cycles_to_transit = 
+				    now + (user_param->duration - 2*(user_param->margin)) * cycles_per_second();
+				break;
+			case SAMPLE_STATE:
+				user_param->state = STOP_SAMPLE_STATE;
+				user_param->tcompleted[0] = now;
+				get_cpu_stats(user_param,2);
+				if (user_param->margin > 0) {
+					user_param->cycles_to_transit = now + user_param->margin * cycles_per_second();
+				}
+				break;
+			case STOP_SAMPLE_STATE:
+			case END_STATE:
+				user_param->state = END_STATE;
+				break;
+			default:
+				fprintf(stderr,"unknown state\n");
+
+		}
+
+	}
+
+
+
+	switch (user_param->state) {
+		case START_STATE:
+			user_param->state = SAMPLE_STATE;
+			get_cpu_stats(user_param,1);
+			user_param->tposted[0] = get_cycles();
+			alarm(user_param->duration - 2*(user_param->margin));
+			break;
+		case SAMPLE_STATE:
+			user_param->state = STOP_SAMPLE_STATE;
+			user_param->tcompleted[0] = get_cycles();
+			get_cpu_stats(user_param,2);
+			if (user_param->margin > 0)
+				alarm(user_param->margin);
+			else
+				catch_alarm(0);
+
+			break;
+		case STOP_SAMPLE_STATE:
+			user_param->state = END_STATE;
+			break;
+		default:
+			fprintf(stderr,"unknown state\n");
+	}
+}
 /******************************************************************************
  *
  ******************************************************************************/
