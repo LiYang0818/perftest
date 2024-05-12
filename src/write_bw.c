@@ -40,6 +40,7 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "utils.h"
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "perftest_communication.h"
@@ -83,8 +84,8 @@ int write_bw(struct THREAD_ARGS* args)
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
-pthread_mutex_lock(mutex);
-printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
+	pthread_mutex_lock(mutex);
+	printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 	/* Configure the parameters values according to user arguments or default values. */
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {
@@ -136,7 +137,7 @@ printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
 	}
-	printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
+	
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");

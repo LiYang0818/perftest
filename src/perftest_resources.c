@@ -5245,31 +5245,6 @@ void duration_state_transit(struct perftest_parameters *user_param)
 
 	}
 
-
-
-	switch (user_param->state) {
-		case START_STATE:
-			user_param->state = SAMPLE_STATE;
-			get_cpu_stats(user_param,1);
-			user_param->tposted[0] = get_cycles();
-			alarm(user_param->duration - 2*(user_param->margin));
-			break;
-		case SAMPLE_STATE:
-			user_param->state = STOP_SAMPLE_STATE;
-			user_param->tcompleted[0] = get_cycles();
-			get_cpu_stats(user_param,2);
-			if (user_param->margin > 0)
-				alarm(user_param->margin);
-			else
-				catch_alarm(0);
-
-			break;
-		case STOP_SAMPLE_STATE:
-			user_param->state = END_STATE;
-			break;
-		default:
-			fprintf(stderr,"unknown state\n");
-	}
 }
 /******************************************************************************
  *
