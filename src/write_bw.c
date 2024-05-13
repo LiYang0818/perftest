@@ -85,7 +85,7 @@ int write_bw(struct THREAD_ARGS* args)
 	user_param.tst     = BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
 	pthread_mutex_lock(mutex);
-	printf("Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
+	fprintf(stdout, "Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 	/* Configure the parameters values according to user arguments or default values. */
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {
@@ -185,8 +185,9 @@ int write_bw(struct THREAD_ARGS* args)
 			goto free_mem;
 		}
 	}
-	printf("Thread ID: %lu release mutex\n", (unsigned long)pthread_self());
+	fprintf(stdout, "Thread ID: %lu release mutex\n", (unsigned long)pthread_self());
 	pthread_mutex_unlock(mutex);
+
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -263,7 +264,7 @@ int write_bw(struct THREAD_ARGS* args)
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
     pthread_barrier_wait(barrier);
-	printf("Thread %lu: Continuing after the barrier\n", (unsigned long)pthread_self());
+	fprintf(stdout, "Thread %lu: Continuing after the barrier\n", (unsigned long)pthread_self());
 
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
@@ -590,18 +591,21 @@ int main(int argc, char *argv[])
 	pthread_t threads[NUM_THREADS];
 	pthread_barrier_t barrier;
 
-    	typedef void* (*FuncPtr)(void*);
-   pthread_barrier_init(&barrier, NULL, NUM_THREADS);
-    struct THREAD_ARGS thread_arg = {&pth_mutex, &barrier, argc, argv};
-    // Create threads
-    for (long i = 0; i < NUM_THREADS; ++i) {
-          if(i>0){
-            for (int j = 1; j<argc; j++)
-		    if(strcmp(argv[j],"10.0.0.1") == 0 ) argv[j] = "10.0.0.2";
-	     
-	  }
-    	    pthread_create(&threads[i], NULL, (FuncPtr)write_bw, (void*)&thread_arg);
-	    sleep(3);
+	typedef void* (*FuncPtr)(void*);
+	pthread_barrier_init(&barrier, NULL, NUM_THREADS);
+	struct THREAD_ARGS thread_arg = {&pth_mutex, &barrier, argc, argv};
+    
+	// Create threads
+	for (long i = 0; i < NUM_THREADS; ++i) {
+		#if 0
+		if(i>0){
+			for (int j = 1; j<argc; j++)
+			if(strcmp(argv[j],"10.0.0.1") == 0 ) argv[j] = "10.0.0.2"; 
+		}
+		#endif
+			pthread_create(&threads[i], NULL, (FuncPtr)write_bw, (void*)&thread_arg);
+		set_cpu_affinity(threads[i], i);	
+		sleep(3);
     }
     // Join threads
     for (long i = 0; i < NUM_THREADS; ++i) {
