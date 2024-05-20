@@ -114,6 +114,8 @@ int main(int argc, char *argv[])
     	struct perftest_comm *p_user_comm;
 		struct perftest_parameters *p_user_param;
 		struct pingpong_context *p_ctx;
+		struct S_THREAD_ARGS *p_args;
+
 		int rc;
 		static int is_server_started = 0;
 
@@ -123,7 +125,11 @@ int main(int argc, char *argv[])
 		MAIN_ALLOC(p_user_param, struct perftest_parameters, 1, free_user_comm);
     	memcpy((void*)p_user_param,(void*)&user_param, sizeof(struct perftest_parameters));
 		
-		struct S_THREAD_ARGS args = {p_user_comm, p_user_param, p_ctx};
+		MAIN_ALLOC(p_args,struct S_THREAD_ARGS args, 1, free_args);
+		p_args->user_comm = p_user_comm;
+		p_args->user_param = p_user_param;
+		p_args->ctx = p_ctx;
+
 
 		if (create_comm_struct(p_user_comm,p_user_param)) {
 			fprintf(stderr," Unable to create RDMA_CM resources\n");
@@ -137,6 +143,7 @@ int main(int argc, char *argv[])
 				fprintf(stderr," Unable to setup_server\n");
 				goto free_user_param;
 			}
+			is_server_started = 1;
 		}
 
 		if ((rc = accept_connection(p_user_comm)))
@@ -144,7 +151,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr," Unable to accept_connection\n");
 			goto free_user_param;
 		}
-		if (pthread_create(&thread, NULL, (FuncPtr)write_bw_server, (void*)&args)) {
+		if (pthread_create(&thread, NULL, (FuncPtr)write_bw_server, (void*)p_args)) {
 			fprintf(stderr, "Error creating server thread\n");
 			goto free_user_param;
 		}
@@ -153,7 +160,8 @@ int main(int argc, char *argv[])
 
 		continue;
 
-
+free_args:
+		free(p_args);
 free_user_param:
 		free(p_user_param);
 free_user_comm:
