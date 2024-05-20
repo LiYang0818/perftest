@@ -34,7 +34,7 @@ ACLOCAL_AMFLAGS= -I m4
 AUTOMAKE_OPTIONS= subdir-objects
 
 noinst_LIBRARIES = libperftest.a
-libperftest_a_SOURCES = src/utils.c src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/mmap_memory.c
+libperftest_a_SOURCES = src/write_bw.c src/utils.c src/get_clock.c src/perftest_communication.c src/perftest_parameters.c src/perftest_resources.c src/perftest_counters.c src/host_memory.c src/mmap_memory.c
 noinst_HEADERS = src/utils.h src/get_clock.h src/perftest_communication.h src/perftest_parameters.h src/perftest_resources.h src/perftest_counters.h src/memory.h src/host_memory.h src/mmap_memory.h src/cuda_memory.h src/rocm_memory.h src/neuron_memory.h src/hl_memory.h
 
 if CUDA
@@ -53,7 +53,7 @@ if HABANALABS
 libperftest_a_SOURCES += src/hl_memory.c
 endif
 
-bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat ib_write_bw ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
+bin_PROGRAMS = ib_send_bw ib_send_lat ib_write_lat perf_client perf_server ib_read_lat ib_read_bw ib_atomic_lat ib_atomic_bw
 bin_SCRIPTS = run_perftest_loopback run_perftest_multi_devices
 
 # Non-source man pages:
@@ -112,8 +112,11 @@ ib_send_lat_LDADD = libperftest.a $(LIBUMAD) $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(
 ib_write_lat_SOURCES = src/write_lat.c
 ib_write_lat_LDADD = libperftest.a $(LIBMATH)  $(LIBMLX4) $(LIBMLX5) $(LIBEFA)
 
-ib_write_bw_SOURCES = src/write_bw.c
-ib_write_bw_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA)
+perf_client_SOURCES = src/client.c
+perf_client_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA)
+
+perf_server_SOURCES = src/server.c
+perf_server_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA)
 
 ib_read_lat_SOURCES = src/read_lat.c
 ib_read_lat_LDADD = libperftest.a $(LIBMATH) $(LIBMLX4) $(LIBMLX5) $(LIBEFA)

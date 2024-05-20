@@ -858,6 +858,8 @@ int create_rdma_cm_connection(struct pingpong_context *ctx,
 		struct perftest_parameters *user_param, struct perftest_comm *comm,
 		struct pingpong_dest *my_dest, struct pingpong_dest *rem_dest);
 
+int setup_server(struct perftest_comm *comm);
+int accept_connection(struct perftest_comm *comm);
 
 #endif /* PERFTEST_COMMUNICATION_H */
 

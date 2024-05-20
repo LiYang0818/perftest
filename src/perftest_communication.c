@@ -2868,7 +2868,143 @@ error:
 	return error_handler(error_message);
 }
 
+/******************************************************************************
+ *
+ ******************************************************************************/
+int setup_server(struct perftest_comm *comm)
+{
+	struct pingpong_context *ctx = comm->rdma_ctx;
+	struct perftest_parameters *user_param = comm->rdma_params;
+	if (user_param->use_rdma_cm) {
+		struct addrinfo *res;
+		struct addrinfo hints;
+		char *service;
+		struct sockaddr_storage sin;
+		char* src_ip = user_param->has_source_ip ? user_param->source_ip : NULL;
 
+		memset(&hints, 0, sizeof hints);
+		hints.ai_flags    = AI_PASSIVE;
+		hints.ai_family   = user_param->ai_family;
+		hints.ai_socktype = SOCK_STREAM;
+
+		if (check_add_port(&service,user_param->port,src_ip,&hints,&res))
+		{
+			fprintf(stderr, "Problem in resolving basic address and port\n");
+			return FAILURE;
+		}
+
+		if (res->ai_family != user_param->ai_family) {
+			freeaddrinfo(res);
+			return FAILURE;
+		}
+
+		if (res->ai_addr->sa_family == AF_INET) {
+			memcpy(&sin, res->ai_addr, sizeof(struct sockaddr_in));
+		}
+		else {
+			memcpy(&sin, res->ai_addr, sizeof(struct sockaddr_in6));
+		}
+
+		sockaddr_set_port((struct sockaddr *)&sin, (unsigned short)user_param->port);
+		freeaddrinfo(res);
+
+		if (rdma_bind_addr(ctx->cm_id_control, (struct sockaddr *)&sin)) {
+			fprintf(stderr," rdma_bind_addr failed\n");
+			return FAILURE;
+		}
+
+		if (rdma_listen(ctx->cm_id_control, user_param->num_of_qps)) {
+			fprintf(stderr, "rdma_listen failed\n");
+			return FAILURE;
+		}
+	} else {
+		if (ethernet_server_connect(comm)) {
+			fprintf(stderr,"Unable to open file descriptor for socket connection\n");
+			return FAILURE;
+		}
+	}
+	return SUCCESS;
+}
+
+int accept_connection(struct perftest_comm *comm)
+{
+	int temp;
+	struct rdma_cm_event *event;
+	struct pingpong_context *ctx = comm->rdma_ctx;
+	struct perftest_parameters *user_param = comm->rdma_params;
+	struct rdma_conn_param conn_param;
+	int rc = 0;
+	
+	if ((rc = rdma_get_cm_event(ctx->cm_channel,&event))) {
+		fprintf(stderr, "rdma_get_cm_events failed\n");
+		return rc;
+	}
+
+	//coverity[uninit_use]
+	if (event->event != RDMA_CM_EVENT_CONNECT_REQUEST) {
+		fprintf(stderr, "bad event waiting for connect request %d\n",event->event);
+		return FAILURE;
+	}
+
+	ctx->cm_id = (struct rdma_cm_id*)event->id;
+	ctx->context = ctx->cm_id->verbs;
+
+	temp = user_param->work_rdma_cm;
+	user_param->work_rdma_cm = ON;
+
+	if (ctx_init(ctx,user_param)) {
+		fprintf(stderr," Unable to create the resources needed by comm struct\n");
+		return FAILURE;
+	}
+
+	memset(&conn_param, 0, sizeof conn_param);
+	if (user_param->verb == READ || user_param->verb == ATOMIC) {
+		conn_param.responder_resources = user_param->out_reads;
+		conn_param.initiator_depth = user_param->out_reads;
+	}
+	if (user_param->connection_type == UD)
+		conn_param.qp_num = ctx->qp[0]->qp_num;
+
+	conn_param.retry_count = user_param->retry_count;
+	conn_param.rnr_retry_count = 7;
+	user_param->work_rdma_cm = temp;
+
+	if (user_param->work_rdma_cm == OFF) {
+
+		if (post_one_recv_wqe(ctx)) {
+			fprintf(stderr, "Couldn't post send \n");
+			return FAILURE;
+		}
+
+	} else if (user_param->connection_type == UD) {
+
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
+
+			if (post_recv_to_get_ah(ctx)) {
+				fprintf(stderr, "Couldn't post send \n");
+				return FAILURE;
+			}
+		}
+	}
+
+	if (rdma_accept(ctx->cm_id, &conn_param)) {
+		fprintf(stderr, "Function rdma_accept failed\n");
+		return FAILURE;
+	}
+
+	if (user_param->work_rdma_cm && user_param->connection_type == UD) {
+
+		if (user_param->tst == LAT || (user_param->tst == BW && user_param->duplex)) {
+			if (create_ah_from_wc_recv(ctx,user_param)) {
+				fprintf(stderr, "Unable to create AH from WC\n");
+				return FAILURE;
+			}
+		}
+	}
+
+	rdma_ack_cm_event(event);
+	return SUCCESS;	
+}
 /******************************************************************************
  * End
  ******************************************************************************/

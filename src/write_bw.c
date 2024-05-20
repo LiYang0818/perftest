@@ -44,18 +44,456 @@
 #include "perftest_parameters.h"
 #include "perftest_resources.h"
 #include "perftest_communication.h"
-#include <bits/pthreadtypes.h>
 
-struct THREAD_ARGS {
-	pthread_mutex_t* mutex;
-	pthread_barrier_t* barrier;
-	int argc;
-	char **argv;
-};
+int write_bw_server(struct S_THREAD_ARGS* args)
+{
+	int i = 0;
+	int rc = 0;
+	struct perftest_comm* p_user_comm = args->user_comm;
+	struct perftest_parameters* p_user_param = args->user_param;
+	struct pingpong_context* p_ctx = args->ctx;
+	struct pingpong_dest *my_dest,*rem_dest;
+	struct bw_report_data		my_bw_rep, rem_bw_rep;
+	int rdma_cm_flow_destroyed = 0;
 
+	sleep(1);
+	exchange_versions(p_user_comm, p_user_param);
+	check_version_compatibility(p_user_param);
+	check_sys_data(p_user_comm, p_user_param);
+
+	/* See if MTU is valid and supported. */
+	if (check_mtu(p_ctx->context,p_user_param, p_user_comm)) {
+		fprintf(stderr, " Couldn't get context for the device\n");
+		dealloc_comm_struct(p_user_comm,p_user_param);
+		goto free_devname;
+	}
+
+	MAIN_ALLOC(my_dest , struct pingpong_dest , p_user_param->num_of_qps , free_rdma_params);
+	memset(my_dest, 0, sizeof(struct pingpong_dest)*p_user_param->num_of_qps);
+	MAIN_ALLOC(rem_dest , struct pingpong_dest , p_user_param->num_of_qps , free_my_dest);
+	memset(rem_dest, 0, sizeof(struct pingpong_dest)*p_user_param->num_of_qps);
+
+	/* Allocating arrays needed for the test. */
+	if(alloc_ctx(p_ctx,p_user_param)){
+		fprintf(stderr, "Couldn't allocate context\n");
+		goto free_mem;
+	}
+
+	/* Create RDMA CM resources and connect through CM. */
+	if (p_user_param->work_rdma_cm == ON) {
+		rc = create_rdma_cm_connection(p_ctx, p_user_param, p_user_comm,
+			my_dest, rem_dest);
+		if (rc) {
+			fprintf(stderr,
+				"Failed to create RDMA CM connection with resources.\n");
+			dealloc_ctx(p_ctx, p_user_param);
+			goto free_mem;
+		}
+	} else {
+		/* create all the basic IB resources (data buffer, PD, MR, CQ and events channel) */
+		if (ctx_init(p_ctx, p_user_param)) {
+			fprintf(stderr, " Couldn't create IB resources\n");
+			dealloc_ctx(p_ctx, p_user_param);
+			goto free_mem;
+		}
+	}
+	
+	/* Set up the Connection. */
+	if (set_up_connection(p_ctx,p_user_param,my_dest)) {
+		fprintf(stderr," Unable to set up socket connection\n");
+		goto destroy_context;
+	}
+
+	/* Print basic test information. */
+	ctx_print_test_info(p_user_param);
+
+	for (i=0; i < p_user_param->num_of_qps; i++) {
+
+		if (ctx_hand_shake(p_user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			goto destroy_context;
+		}
+	}
+
+	if (p_user_param->work_rdma_cm == OFF) {
+		if (ctx_check_gid_compatibility(&my_dest[0], &rem_dest[0])) {
+			fprintf(stderr,"\n Found Incompatibility issue with GID types.\n");
+			fprintf(stderr," Please Try to use a different IP version.\n\n");
+			goto destroy_context;
+		}
+	}
+
+	if (p_user_param->work_rdma_cm == OFF) {
+		if (ctx_connect(p_ctx,rem_dest,p_user_param,my_dest)) {
+			fprintf(stderr," Unable to Connect the HCA's through the link\n");
+			goto destroy_context;
+		}
+	}
+
+	if (p_user_param->connection_type == DC)
+	{
+		/* Set up connection one more time to send qpn properly for DC */
+		if (set_up_connection(p_ctx, p_user_param, my_dest))
+		{
+			fprintf(stderr," Unable to set up socket connection\n");
+			goto destroy_context;
+		}
+	}
+
+	/* Print this machine QP information */
+	for (i=0; i < p_user_param->num_of_qps; i++)
+		ctx_print_pingpong_data(&my_dest[i],p_user_comm);
+
+	p_user_comm->rdma_params->side = REMOTE;
+
+	for (i=0; i < p_user_param->num_of_qps; i++) {
+		if (ctx_hand_shake(p_user_comm,&my_dest[i],&rem_dest[i])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			goto destroy_context;
+		}
+
+		ctx_print_pingpong_data(&rem_dest[i],p_user_comm);
+	}
+
+	/* An additional handshake is required after moving qp to RTR. */
+	if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+		fprintf(stderr," Failed to exchange data between server and clients\n");
+		goto destroy_context;
+	}
+
+	if (p_user_param->output == FULL_VERBOSITY) {
+		if (p_user_param->report_per_port) {
+			printf(RESULT_LINE_PER_PORT);
+			printf((p_user_param->report_fmt == MBS ? RESULT_FMT_PER_PORT : RESULT_FMT_G_PER_PORT));
+		}
+		else {
+			printf(RESULT_LINE);
+			printf((p_user_param->report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+		}
+
+		printf((p_user_param->cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+	}
+
+	/* For half duplex write tests, server just waits for client to exit */
+	if (p_user_param->machine == SERVER && p_user_param->verb == WRITE && !p_user_param->duplex) {
+		if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			goto free_mem;
+		}
+
+		xchg_bw_reports(p_user_comm, &my_bw_rep,&rem_bw_rep,atof(p_user_param->rem_version));
+		print_full_bw_report(p_user_param, &rem_bw_rep, NULL);
+		if (ctx_close_connection(p_user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr,"Failed to close connection between server and client\n");
+			goto free_mem;
+		}
+
+		if (p_user_param->output == FULL_VERBOSITY) {
+			if (p_user_param->report_per_port)
+				printf(RESULT_LINE_PER_PORT);
+			else
+				printf(RESULT_LINE);
+		}
+
+		if (p_user_param->work_rdma_cm == ON) {
+			if (destroy_ctx(p_ctx,p_user_param)) {
+				fprintf(stderr, "Failed to destroy resources\n");
+				goto destroy_cm_context;
+			}
+			p_user_comm->rdma_params->work_rdma_cm = OFF;
+			free(my_dest);
+			free(rem_dest);
+			//free(p_user_param->ib_devname);
+			if(destroy_ctx(p_user_comm->rdma_ctx, p_user_comm->rdma_params)) {
+				free(p_user_comm->rdma_params);
+				free(p_user_comm->rdma_ctx);
+				return FAILURE;
+			}
+			free(p_user_comm->rdma_params);
+			free(p_user_comm->rdma_ctx);
+			return SUCCESS;
+		}
+
+		free(my_dest);
+		free(rem_dest);
+		//free(p_user_param->ib_devname);
+		if(destroy_ctx(p_ctx, p_user_param)) {
+			free(p_user_comm->rdma_params);
+			return FAILURE;
+		}
+		free(p_user_comm->rdma_params);
+		return SUCCESS;
+	}
+
+	if (p_user_param->test_method == RUN_ALL) {
+
+		for (i = 1; i < 24 ; ++i) {
+
+			p_user_param->size = (uint64_t)1 << i;
+
+			if (p_user_param->machine == CLIENT || p_user_param->duplex)
+				ctx_set_send_wqes(p_ctx,p_user_param,rem_dest);
+
+			if (p_user_param->verb == WRITE_IMM && (p_user_param->machine == SERVER || p_user_param->duplex)) {
+				if (ctx_set_recv_wqes(p_ctx,p_user_param)) {
+					fprintf(stderr," Failed to post receive recv_wqes\n");
+					goto free_mem;
+				}
+			}
+
+			if (p_user_param->perform_warm_up) {
+
+				if (p_user_param->verb == WRITE_IMM) {
+					fprintf(stderr, "Warm up not supported for WRITE_IMM verb.\n");
+					fprintf(stderr, "Skipping\n");
+				} else if(perform_warm_up(p_ctx, p_user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
+					goto free_mem;
+				}
+			}
+
+			if(p_user_param->duplex || p_user_param->verb == WRITE_IMM) {
+				if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+					goto free_mem;
+				}
+			}
+
+			if (p_user_param->duplex && p_user_param->verb == WRITE_IMM) {
+
+				if(run_iter_bi(p_ctx,p_user_param)){
+					fprintf(stderr," Failed to complete run_iter_bi function successfully\n");
+					goto free_mem;
+				}
+
+			} else if (p_user_param->machine == CLIENT || p_user_param->verb != WRITE_IMM) {
+
+				if(run_iter_bw(p_ctx,p_user_param)) {
+					fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
+					goto free_mem;
+				}
+
+			} else if (p_user_param->machine == SERVER) {
+
+				if(run_iter_bw_server(p_ctx,p_user_param)) {
+					fprintf(stderr," Failed to complete run_iter_bw_server function successfully\n");
+					goto free_mem;
+				}
+			}
+
+			if (p_user_param->verb == WRITE_IMM || (p_user_param->duplex && (atof(p_user_param->version) >= 4.6))) {
+				if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+					fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+					goto free_mem;
+				}
+			}
+
+			print_report_bw(p_user_param,&my_bw_rep);
+
+			if (p_user_param->duplex && (p_user_param->verb != WRITE_IMM || p_user_param->test_type != DURATION)) {
+				xchg_bw_reports(p_user_comm, &my_bw_rep,&rem_bw_rep,atof(p_user_param->rem_version));
+				print_full_bw_report(p_user_param, &my_bw_rep, &rem_bw_rep);
+			}
+		}
+
+	} else if (p_user_param->test_method == RUN_REGULAR) {
+
+		if (p_user_param->machine == CLIENT || p_user_param->duplex)
+			ctx_set_send_wqes(p_ctx,p_user_param,rem_dest);
+
+		if (p_user_param->verb == WRITE_IMM && (p_user_param->machine == SERVER || p_user_param->duplex)) {
+			if (ctx_set_recv_wqes(p_ctx,p_user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				goto free_mem;
+			}
+		}
+
+		if (p_user_param->verb != SEND && p_user_param->verb != WRITE_IMM) {
+
+			if (p_user_param->perform_warm_up) {
+				if(perform_warm_up(p_ctx, p_user_param)) {
+					fprintf(stderr, "Problems with warm up\n");
+					goto free_mem;
+				}
+			}
+		}
+
+		if(p_user_param->duplex || p_user_param->verb == WRITE_IMM) {
+			if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+				fprintf(stderr,"Failed to sync between server and client between different msg sizes\n");
+				goto free_mem;
+			}
+		}
+
+		if (p_user_param->duplex && p_user_param->verb == WRITE_IMM) {
+
+			if(run_iter_bi(p_ctx,p_user_param)){
+				fprintf(stderr," Failed to complete run_iter_bi function successfully\n");
+				goto free_mem;
+			}
+
+		} else if (p_user_param->machine == CLIENT || p_user_param->verb != WRITE_IMM) {
+
+			if(run_iter_bw(p_ctx,p_user_param)) {
+				fprintf(stderr," Failed to complete run_iter_bw function successfully\n");
+				goto free_mem;
+			}
+
+		} else if (p_user_param->machine == SERVER) {
+
+			if(run_iter_bw_server(p_ctx,p_user_param)) {
+				fprintf(stderr," Failed to complete run_iter_bw_server function successfully\n");
+				goto free_mem;
+			}
+		}
+
+		print_report_bw(p_user_param,&my_bw_rep);
+
+		if (p_user_param->duplex && (p_user_param->verb != WRITE_IMM || p_user_param->test_type != DURATION)) {
+			xchg_bw_reports(p_user_comm, &my_bw_rep,&rem_bw_rep,atof(p_user_param->rem_version));
+			print_full_bw_report(p_user_param, &my_bw_rep, &rem_bw_rep);
+		}
+
+		if (p_user_param->report_both && p_user_param->duplex) {
+			printf(RESULT_LINE);
+			printf("\n Local results: \n");
+			printf(RESULT_LINE);
+			printf((p_user_param->report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			printf((p_user_param->cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+			print_full_bw_report(p_user_param, &my_bw_rep, NULL);
+			printf(RESULT_LINE);
+
+			printf("\n Remote results: \n");
+			printf(RESULT_LINE);
+			printf((p_user_param->report_fmt == MBS ? RESULT_FMT : RESULT_FMT_G));
+			printf((p_user_param->cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
+			print_full_bw_report(p_user_param, &rem_bw_rep, NULL);
+		}
+	} else if (p_user_param->test_method == RUN_INFINITELY) {
+
+		if (p_user_param->machine == CLIENT || p_user_param->duplex)
+			ctx_set_send_wqes(p_ctx,p_user_param,rem_dest);
+
+		else if (p_user_param->machine == SERVER && p_user_param->verb == WRITE_IMM) {
+			if (ctx_set_recv_wqes(p_ctx,p_user_param)) {
+				fprintf(stderr," Failed to post receive recv_wqes\n");
+				goto free_mem;
+			}
+		}
+
+		if (p_user_param->verb == WRITE_IMM) {
+			if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+				fprintf(stderr,"Failed to exchange data between server and clients\n");
+				goto free_mem;
+			}
+		}
+
+		if (p_user_param->machine == CLIENT || p_user_param->verb == WRITE) {
+			if(run_iter_bw_infinitely(p_ctx,p_user_param)) {
+				fprintf(stderr," Error occurred while running infinitely! aborting ...\n");
+				goto free_mem;
+			}
+		} else if (p_user_param->machine == SERVER && p_user_param->verb == WRITE_IMM) {
+			if(run_iter_bw_infinitely_server(p_ctx,p_user_param)) {
+				fprintf(stderr," Error occurred while running infinitely on server! aborting ...\n");
+				goto free_mem;
+			}
+		}
+	}
+
+	if (p_user_param->output == FULL_VERBOSITY) {
+		if (p_user_param->report_per_port)
+			printf(RESULT_LINE_PER_PORT);
+		else
+			printf(RESULT_LINE);
+	}
+
+	/* For half duplex write tests, server just waits for client to exit */
+	if (p_user_param->machine == CLIENT && p_user_param->verb == WRITE && !p_user_param->duplex) {
+		if (ctx_hand_shake(p_user_comm,&my_dest[0],&rem_dest[0])) {
+			fprintf(stderr," Failed to exchange data between server and clients\n");
+			goto free_mem;
+		}
+
+		xchg_bw_reports(p_user_comm, &my_bw_rep,&rem_bw_rep,atof(p_user_param->rem_version));
+	}
+
+	/* Closing connection. */
+	if (ctx_close_connection(p_user_comm,&my_dest[0],&rem_dest[0])) {
+		fprintf(stderr,"Failed to close connection between server and client\n");
+		goto free_mem;
+	}
+
+	if (!p_user_param->is_bw_limit_passed && (p_user_param->is_limit_bw == ON ) ) {
+		fprintf(stderr,"Error: BW result is below bw limit\n");
+		goto destroy_context;
+	}
+
+	if (!p_user_param->is_msgrate_limit_passed && (p_user_param->is_limit_bw == ON )) {
+		fprintf(stderr,"Error: Msg rate  is below msg_rate limit\n");
+		goto destroy_context;
+	}
+	if (p_user_param->work_rdma_cm == ON) {
+		if (destroy_ctx(p_ctx,p_user_param)) {
+			fprintf(stderr, "Failed to destroy resources\n");
+			goto destroy_cm_context;
+		}
+
+		p_user_comm->rdma_params->work_rdma_cm = OFF;
+		free(rem_dest);
+		free(my_dest);
+		free(p_user_param->ib_devname);
+		if(destroy_ctx(p_user_comm->rdma_ctx, p_user_comm->rdma_params)) {
+			free(p_user_comm->rdma_params);
+			free(p_user_comm->rdma_ctx);
+			return FAILURE;
+		}
+		free(p_user_comm->rdma_params);
+		free(p_user_comm->rdma_ctx);
+		return SUCCESS;
+	}
+
+	free(rem_dest);
+	free(my_dest);
+	//free(p_user_param->ib_devname);
+	if(destroy_ctx(p_ctx, p_user_param)){
+		free(p_user_comm->rdma_params);
+		return FAILURE;
+	}
+	free(p_user_comm->rdma_params);
+	return SUCCESS;
+
+destroy_context:
+	if (destroy_ctx(p_ctx,p_user_param))
+		fprintf(stderr, "Failed to destroy resources\n");
+destroy_cm_context:
+	if (p_user_param->work_rdma_cm == ON) {
+		rdma_cm_flow_destroyed = 1;
+		p_user_comm->rdma_params->work_rdma_cm = OFF;
+		destroy_ctx(p_user_comm->rdma_ctx,p_user_comm->rdma_params);
+	}
+free_mem:
+	free(rem_dest);
+free_my_dest:
+	free(my_dest);
+free_rdma_params:
+	if (p_user_param->use_rdma_cm == ON && rdma_cm_flow_destroyed == 0)
+		dealloc_comm_struct(p_user_comm, p_user_param);
+
+	else {
+		if(p_user_param->use_rdma_cm == ON)
+			free(p_user_comm->rdma_ctx);
+		free(p_user_comm->rdma_params);
+	}
+free_devname:
+	//free(p_user_param->ib_devname);
+//return_error:
+	//coverity[leaked_storage]
+	return FAILURE;	
+}
 /******************************************************************************
  ******************************************************************************/
-int write_bw(struct THREAD_ARGS* args)
+int write_bw_client(struct C_THREAD_ARGS* args)
 {
 	int argc = args->argc;
 	char** argv = args->argv;
@@ -84,8 +522,6 @@ int write_bw(struct THREAD_ARGS* args)
 	user_param.verb    = WRITE;
 	user_param.tst     = BW;
 	strncpy(user_param.version, VERSION, sizeof(user_param.version));
-	pthread_mutex_lock(mutex);
-	fprintf(stdout, "Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
 	/* Configure the parameters values according to user arguments or default values. */
 	ret_parser = parser(&user_param,argv,argc);
 	if (ret_parser) {
@@ -137,7 +573,10 @@ int write_bw(struct THREAD_ARGS* args)
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
 	}
-	
+	if ( user_comm.rdma_params->machine == CLIENT) {
+		pthread_mutex_lock(mutex);
+	    fprintf(stdout, "Thread ID: %lu take mutex\n", (unsigned long)pthread_self());
+	}
 	/* Initialize the connection and print the local data. */
 	if (establish_connection(&user_comm)) {
 		fprintf(stderr," Unable to init the socket connection\n");
@@ -185,9 +624,10 @@ int write_bw(struct THREAD_ARGS* args)
 			goto free_mem;
 		}
 	}
-	fprintf(stdout, "Thread ID: %lu release mutex\n", (unsigned long)pthread_self());
-	pthread_mutex_unlock(mutex);
-
+	if ( user_comm.rdma_params->machine == CLIENT) {
+		fprintf(stdout, "Thread ID: %lu release mutex\n", (unsigned long)pthread_self());
+		pthread_mutex_unlock(mutex);
+	}
 	/* Set up the Connection. */
 	if (set_up_connection(&ctx,&user_param,my_dest)) {
 		fprintf(stderr," Unable to set up socket connection\n");
@@ -263,9 +703,10 @@ int write_bw(struct THREAD_ARGS* args)
 
 		printf((user_param.cpu_util_data.enable ? RESULT_EXT_CPU_UTIL : RESULT_EXT));
 	}
-    pthread_barrier_wait(barrier);
-	fprintf(stdout, "Thread %lu: Continuing after the barrier\n", (unsigned long)pthread_self());
-
+    if (user_comm.rdma_params->machine == CLIENT) {
+		pthread_barrier_wait(barrier);
+		fprintf(stdout, "Thread %lu: Continuing after the barrier\n", (unsigned long)pthread_self());
+	}
 	/* For half duplex write tests, server just waits for client to exit */
 	if (user_param.machine == SERVER && user_param.verb == WRITE && !user_param.duplex) {
 		if (ctx_hand_shake(&user_comm,&my_dest[0],&rem_dest[0])) {
@@ -582,41 +1023,5 @@ free_devname:
 return_error:
 	//coverity[leaked_storage]
 	return FAILURE;
-}
-
-int main(int argc, char *argv[])
-{
-    const int NUM_THREADS = 2;
-	pthread_mutex_t pth_mutex;
-	pthread_t threads[NUM_THREADS];
-	pthread_barrier_t barrier;
-
-	typedef void* (*FuncPtr)(void*);
-	pthread_barrier_init(&barrier, NULL, NUM_THREADS);
-	struct THREAD_ARGS thread_arg = {&pth_mutex, &barrier, argc, argv};
-    
-	// Create threads
-	for (long i = 0; i < NUM_THREADS; ++i) {
-		#if 0
-		if(i>0){
-			for (int j = 1; j<argc; j++)
-			if(strcmp(argv[j],"10.0.0.1") == 0 ) argv[j] = "10.0.0.2"; 
-		}
-		#endif
-			pthread_create(&threads[i], NULL, (FuncPtr)write_bw, (void*)&thread_arg);
-		set_cpu_affinity(threads[i], i);	
-		sleep(3);
-    }
-    // Join threads
-    for (long i = 0; i < NUM_THREADS; ++i) {
-        pthread_join(threads[i], NULL);
-    }
-
-    // Clean up
-    pthread_mutex_destroy(&pth_mutex);
-    pthread_barrier_destroy(&barrier);
-    
-    return 0;
-    
 }
 
