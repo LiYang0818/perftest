@@ -1261,7 +1261,7 @@ int create_comm_struct(struct perftest_comm *comm,
 	MAIN_ALLOC(comm->rdma_params, struct perftest_parameters, 1, return_error);
 	memset(comm->rdma_params, 0, sizeof(struct perftest_parameters));
 
-	comm->rdma_params->port		   	= user_param->port;
+	comm->rdma_params->port		   	= DEF_PORT_ALT;
 	comm->rdma_params->ai_family	   	= user_param->ai_family;
 	comm->rdma_params->sockfd      		= -1;
 	comm->rdma_params->gid_index   		= user_param->gid_index;

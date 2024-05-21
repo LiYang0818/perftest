@@ -96,6 +96,7 @@
 
 /* Default Values of perftest parameters */
 #define DEF_PORT      (18515)
+#define DEF_PORT_ALT  (18516)
 #define DEF_IB_PORT   (1)
 #define DEF_IB_PORT2  (2)
 #define DEF_SIZE_BW   (65536)

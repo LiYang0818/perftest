@@ -49,7 +49,7 @@ extern int write_bw_server(struct S_THREAD_ARGS* args);
 int main(int argc, char *argv[])
 {
 	int	ret_parser;
-	struct ibv_device		*ib_dev = NULL;
+	struct ibv_device *ib_dev = NULL;
 	struct pingpong_context		ctx;
 	struct perftest_parameters	user_param;
 	struct perftest_comm		user_comm;
@@ -123,9 +123,9 @@ int main(int argc, char *argv[])
 		memcpy((void*)p_ctx,(void*)&ctx, sizeof(struct pingpong_context));
 		MAIN_ALLOC(p_user_comm, struct perftest_comm, 1, free_context);
 		MAIN_ALLOC(p_user_param, struct perftest_parameters, 1, free_user_comm);
-    	memcpy((void*)p_user_param,(void*)&user_param, sizeof(struct perftest_parameters));
+		memcpy((void*)p_user_param,(void*)&user_param, sizeof(struct perftest_parameters));
 		
-		MAIN_ALLOC(p_args,struct S_THREAD_ARGS args, 1, free_args);
+		MAIN_ALLOC(p_args,struct S_THREAD_ARGS, 1, free_args);
 		p_args->user_comm = p_user_comm;
 		p_args->user_param = p_user_param;
 		p_args->ctx = p_ctx;
