@@ -132,6 +132,22 @@ double bswap_double(double x);
 int create_comm_struct (struct perftest_comm *comm,
 		struct perftest_parameters *user_param);
 
+/* create_comm_struct
+ *
+ * Description : Creating the communication struct for Etherent or rdma_cm options.
+ *
+ * Parameters :
+ *	comm - An empty Communication struct.
+ *  user_param -  Perftest parameters.
+ *  cm_channel_control - the rdma cm channel to use, if NULL create a new one
+ *  cm_id_control - the rdma cm id to use, if NULL create a new one
+ * 
+ * Return Value : SUCCESS,FAILURE.
+ */
+int create_comm_struct_alt(struct perftest_comm *comm,
+		struct perftest_parameters *user_param,
+		struct rdma_event_channel	**cm_channel_control,
+		struct rdma_cm_id	**cm_id_control);
 
 /* dealloc_comm_struct .
  *

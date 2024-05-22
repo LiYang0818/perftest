@@ -109,7 +109,8 @@ int main(int argc, char *argv[])
 		printf("* Waiting for client to connect... *\n");
 		printf("************************************\n");
 	}
-
+	struct rdma_event_channel	*cm_channel_control = NULL;
+	struct rdma_cm_id			*cm_id_control = NULL;
 	while(1) {
     	struct perftest_comm *p_user_comm;
 		struct perftest_parameters *p_user_param;
@@ -131,7 +132,7 @@ int main(int argc, char *argv[])
 		p_args->ctx = p_ctx;
 
 
-		if (create_comm_struct(p_user_comm,p_user_param)) {
+		if (create_comm_struct_alt(p_user_comm,p_user_param, &cm_channel_control, &cm_id_control)) {
 			fprintf(stderr," Unable to create RDMA_CM resources\n");
 			goto free_user_param;
 		}
@@ -155,7 +156,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Error creating server thread\n");
 			goto free_user_param;
 		}
-		fprintf(stdout, "Created thread %d.", ++thread_count);
+		fprintf(stdout, "Created thread %d. \n", ++thread_count);
 		pthread_detach(thread);
 
 		continue;
