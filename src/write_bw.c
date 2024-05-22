@@ -446,10 +446,12 @@ int write_bw_server(struct S_THREAD_ARGS* args)
 		if(destroy_ctx(p_user_comm->rdma_ctx, p_user_comm->rdma_params)) {
 			free(p_user_comm->rdma_params);
 			free(p_user_comm->rdma_ctx);
+			free(args);
 			return FAILURE;
 		}
 		free(p_user_comm->rdma_params);
 		free(p_user_comm->rdma_ctx);
+		free(args);
 		return SUCCESS;
 	}
 
@@ -458,9 +460,11 @@ int write_bw_server(struct S_THREAD_ARGS* args)
 	//free(p_user_param->ib_devname);
 	if(destroy_ctx(p_ctx, p_user_param)){
 		free(p_user_comm->rdma_params);
+		free(args);
 		return FAILURE;
 	}
 	free(p_user_comm->rdma_params);
+	free(args);
 	return SUCCESS;
 
 destroy_context:
@@ -489,8 +493,10 @@ free_devname:
 	//free(p_user_param->ib_devname);
 //return_error:
 	//coverity[leaked_storage]
+	free(args);
 	return FAILURE;	
 }
+
 /******************************************************************************
  ******************************************************************************/
 int write_bw_client(struct C_THREAD_ARGS* args)
@@ -499,13 +505,8 @@ int write_bw_client(struct C_THREAD_ARGS* args)
 	char** argv = args->argv;
 	pthread_mutex_t* mutex = args->mutex;
 	pthread_barrier_t* barrier = args->barrier;
-	for (int j = 0; j< argc; j++)
-	{
-		printf("%s ", argv[j]);
-	}
-	printf("\n");
 
-	int				ret_parser, i = 0, rc;
+	int	ret_parser, i = 0, rc;
 	struct ibv_device		*ib_dev = NULL;
 	struct pingpong_context		ctx;
 	struct pingpong_dest		*my_dest,*rem_dest;

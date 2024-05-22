@@ -50,7 +50,6 @@ int main(int argc, char *argv[])
 	pthread_t threads[NUM_THREADS];
 	pthread_barrier_t barrier;
 
-	
 	pthread_barrier_init(&barrier, NULL, NUM_THREADS);
 	struct C_THREAD_ARGS thread_arg = {&pth_mutex, &barrier, argc, argv};
     
